@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RapidTable AI | Heuristic Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap');
+        body { font-family: 'Outfit', sans-serif; background-color: #f8fafc; }
+        .table-unit { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    </style>
+</head>
+<body class="p-4 md:p-10">
+
+    <div class="max-w-6xl mx-auto">
+        <header class="flex flex-col md:flex-row justify-between items-center mb-10 gap-6 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
+            <div>
+                <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight">RapidTable <span class="text-indigo-600">AI</span></h1>
+                <p class="text-slate-400 text-sm font-medium">Heuristic-Based Seating Optimization</p>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="advanceTime()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-3 rounded-2xl font-bold transition flex items-center gap-2">
+                    <i data-lucide="clock" class="w-5 h-5"></i> +5m
+                </button>
+                <button onclick="smartAllocate()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-2xl font-bold shadow-lg shadow-indigo-200 transition flex items-center gap-2">
+                    <i data-lucide="brain-circuit" class="w-5 h-5"></i> Run Optimizer
+                </button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div class="lg:col-span-4 space-y-6">
+                <div class="bg-white p-7 rounded-[2rem] border border-slate-100 shadow-sm">
+                    <h2 class="text-lg font-bold mb-5 flex items-center gap-2 text-slate-800">
+                        <i data-lucide="user-plus" class="w-5 h-5 text-indigo-500"></i> Register Guest
+                    </h2>
+                    <div class="space-y-3">
+                        <input id="custName" type="text" placeholder="Customer Name" class="w-full bg-slate-50 border-none p-4 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-semibold">
+                        <input id="gSize" type="number" placeholder="No. of Guests" class="w-full bg-slate-50 border-none p-4 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold">
+                        <button onclick="addGuest()" class="w-full bg-slate-900 text-white font-bold py-4 rounded-xl hover:bg-black transition-all transform active:scale-95 shadow-md">ADD TO WAITLIST</button>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900 rounded-[2rem] p-6 shadow-xl border border-slate-800">
+                    <div class="flex justify-between items-center mb-4 border-b border-slate-800 pb-4">
+                        <h3 class="text-xs font-black text-indigo-400 uppercase tracking-widest italic">Prioritized Queue</h3>
+                        <span class="text-[10px] text-slate-500 font-bold uppercase">Sorted by Score</span>
+                    </div>
+                    <div id="queueBox" class="space-y-3 max-h-80 overflow-y-auto pr-2">
+                        </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-8">
+                <div id="floor" class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    </div>
+
+                <div class="mt-8 bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-2">
+                            <div class="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse"></div>
+                            <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Heuristic Decision Log</h4>
+                        </div>
+                        <span class="text-[9px] font-bold text-slate-300">v2.0 Optimization Active</span>
+                    </div>
+                    <div id="log" class="font-mono text-[10px] text-slate-500 h-32 overflow-y-auto space-y-1 pr-4">
+                        <div>System Initialized. Score parameters: Time (10/30) + Fill Efficiency (50).</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration: Each unit has 4 seats
+        let tables = [
+            { id: 1, available_in: 0, customer: null, size: 0, master: null },
+            { id: 2, available_in: 10, customer: "Alex", size: 2, master: null },
+            { id: 3, available_in: 15, customer: "Sarah", size: 3, master: null },
+            { id: 4, available_in: 20, customer: "James", size: 4, master: null },
+            { id: 5, available_in: 25, customer: "Miller", size: 5, master: null },
+            { id: 6, available_in: 25, customer: "Miller", size: 5, master: 5 } 
+        ];
+
+        let queue = [];
+
+        function calculateHeuristic(party) {
+            let score = 0;
+            
+            // 1. TIME COMPONENT
+            // 10 pts/min for first 10 mins, 30 pts/min thereafter
+            if (party.wait <= 10) {
+                score += party.wait * 10;
+            } else {
+                score += 100 + ((party.wait - 10) * 30);
+            }
+
+            // 2. SEAT FILLING COMPONENT (Efficiency)
+            const unitsNeeded = Math.ceil(party.size / 4);
+            const totalSeatsAvailable = unitsNeeded * 4;
+            
+            if (party.size === totalSeatsAvailable) {
+                score += 50; // Perfect fit bonus
+            } else if (party.size < (totalSeatsAvailable / 2)) {
+                score -= 20; // Inefficiency penalty
+            }
+
+            // 3. SPECIAL SCENARIO: Group Size Weight
+            if (party.size > 4) score += 20; // Slight nudge for larger groups
+
+            return score;
+        }
+
+        function addGuest() {
+            const name = document.getElementById('custName');
+            const size = document.getElementById('gSize');
+            if(!name.value || !size.value || size.value < 1) return;
+            
+            queue.push({ 
+                name: name.value, 
+                size: parseInt(size.value), 
+                wait: 0 
+            });
+            
+            logAI(`REGISTERED: ${name.value} (${size.value}p) entered waitlist.`);
+            name.value = '';
+            size.value = '';
+            render();
+        }
+
+        function smartAllocate() {
+            if (queue.length === 0) {
+                logAI("Optimization skipped: Queue is empty.");
+                return;
+            }
+
+            // Sort queue based on current heuristic score
+            queue.sort((a, b) => calculateHeuristic(b) - calculateHeuristic(a));
+
+            for (let i = 0; i < queue.length; i++) {
+                const party = queue[i];
+                const needed = Math.ceil(party.size / 4);
+                const freeTables = tables.filter(t => t.available_in === 0);
+
+                if (freeTables.length >= needed) {
+                    const selection = freeTables.slice(0, needed);
+                    const duration = 30; // Occupational requirement
+                    const leadId = selection[0].id;
+                    const finalScore = calculateHeuristic(party);
+
+                    selection.forEach((t, idx) => {
+                        t.available_in = duration;
+                        t.customer = party.name;
+                        t.size = party.size;
+                        t.master = (idx === 0) ? null : leadId;
+                    });
+
+                    logAI(`SEATED: ${party.name} | Score: ${finalScore} | Units: ${selection.map(t=>t.id).join(' & ')}`);
+                    queue.splice(i, 1);
+                    render();
+                    return;
+                }
+            }
+            logAI("No optimal seating configuration found for top candidates.");
+        }
+
+        function advanceTime() {
+            tables.forEach(t => {
+                if (t.available_in > 0) {
+                    t.available_in = Math.max(0, t.available_in - 5);
+                    if (t.available_in === 0) {
+                        t.customer = null;
+                        t.master = null;
+                        t.size = 0;
+                    }
+                }
+            });
+            queue.forEach(p => p.wait += 5);
+            logAI("Time progressed +5m. Recalculating scores.");
+            render();
+        }
+
+        function logAI(msg) {
+            const l = document.getElementById('log');
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit'});
+            l.innerHTML = `<div><span class="text-indigo-400">[${time}]</span> ${msg}</div>` + l.innerHTML;
+        }
+
+        function render() {
+            const qBox = document.getElementById('queueBox');
+            
+            // Re-sort queue for visual display of priority
+            queue.sort((a, b) => calculateHeuristic(b) - calculateHeuristic(a));
+
+            qBox.innerHTML = queue.length ? queue.map(p => {
+                const score = calculateHeuristic(p);
+                return `
+                <div class="bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50 flex flex-col gap-2">
+                    <div class="flex justify-between items-start">
+                        <span class="text-white font-bold text-sm">${p.name} <span class="text-slate-500 font-normal ml-1">(${p.size}p)</span></span>
+                        <span class="text-indigo-400 font-mono text-[10px] bg-indigo-500/10 px-2 py-1 rounded-md">Score: ${score}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-500 text-[10px] font-bold uppercase tracking-wider">${p.wait}m waiting</span>
+                        <div class="flex gap-1">
+                            ${Array(Math.ceil(p.size/4)).fill(0).map(() => `<div class="w-1.5 h-1.5 rounded-full bg-slate-600"></div>`).join('')}
+                        </div>
+                    </div>
+                </div>
+            `}).join('') : '<div class="text-slate-600 text-center text-xs py-10 italic">No guests waiting</div>';
+
+            const floor = document.getElementById('floor');
+            floor.innerHTML = tables.map((t, idx) => {
+                const busy = t.available_in > 0;
+                const isSlave = t.master !== null;
+                
+                return `
+                    <div class="table-unit relative h-40 rounded-[2.5rem] border-2 flex flex-col items-center justify-center transition-all ${busy ? 'bg-white border-indigo-100 shadow-sm' : 'bg-slate-50/50 border-slate-200 border-dashed'}">
+                        <span class="absolute top-5 left-6 text-[9px] font-black text-slate-400 uppercase tracking-widest">${isSlave ? 'Linked' : 'Unit ' + t.id}</span>
+                        
+                        ${busy ? `
+                            <div class="text-center">
+                                <i data-lucide="${isSlave ? 'link' : 'users'}" class="w-5 h-5 mx-auto mb-2 ${isSlave ? 'text-slate-300' : 'text-indigo-500'}"></i>
+                                <div class="text-xs font-black text-slate-900 mb-0.5 uppercase tracking-tight">${isSlave ? 'Joined' : t.customer}</div>
+                                <div class="flex items-center justify-center gap-1.5">
+                                    <span class="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+                                    <span class="text-[10px] font-bold text-indigo-500 uppercase">${t.available_in}m</span>
+                                </div>
+                            </div>
+                        ` : `
+                            <div class="text-center opacity-40">
+                                <i data-lucide="door-open" class="w-5 h-5 mx-auto mb-1 text-slate-400"></i>
+                                <div class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Open</div>
+                            </div>
+                        `}
+                    </div>
+                `;
+            }).join('');
+            
+            lucide.createIcons();
+        }
+
+        render();
+    </script>
+</body>
+</html>
